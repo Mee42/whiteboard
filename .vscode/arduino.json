@@ -1,0 +1,7 @@
+{
+    "configuration": "mode=off",
+    "board": "arduino:megaavr:nona4809",
+    "sketch": "test.c/test.c.ino",
+    "port": "/dev/ttyACM0",
+    "programmer": "arduino:medbg"
+}
