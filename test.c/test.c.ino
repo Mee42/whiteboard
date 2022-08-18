@@ -61,6 +61,8 @@ r 60, -70
 f 0, -10
 
 */
+
+
 // where we want to be
 // where 0 = the marker is touching the corner
 // and 512*8(1 rot) = the motor is is (2)(pi)(r) units away from the corner
@@ -71,9 +73,8 @@ long setpointB = 0; // this is in ticks from the B corner to the marker
 long positionA = 0;
 long positionB = 0;
 
-
-long xMax = 492;    // this is the width of the whiteboard in mm, 19 and 3/8in
-long yMax = 390;    // this is the height of the whtiteboard in mm
+const long xMax = 492;    // this is the width of the whiteboard in mm, 19 and 3/8in
+const long yMax = 390;    // this is the height of the whtiteboard in mm
 
 long string_length_at_center; // in mm
 long lastX, lastY;
@@ -111,6 +112,10 @@ void xy_to_motor_setpoints(long xTarget, long yTarget) {
 }
 
 
+
+void buffer() {
+
+}
 
 void loop() {
   if(Serial.available() > 0){
