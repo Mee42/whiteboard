@@ -2,82 +2,41 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <sys/socket.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <stdbool.h>
+
+
+#define true 1
+#define false 0
+
 typedef struct {
     int x, y;
 } point_t;
 
+void tcp(void);
+char* read_index_file(void);
 
 int main(void) {
-    #define points_size 46
-    // point_t points[points_size] = {
-	// { -100, -70 }, // w
-	// { -85, 0 },
-	// { -60, -70 },
-	// { -45, 0 },
-	// { -30, -70 },
 
-	// { -20, -70 }, // p
-	// { 0, -50 },
-	// { -20, -30 },
-	// { -20, -70 },
-	// { -20, 0 },
+    tcp();
+    return 0;
 
-	// { 10, 0 }, // i
-	// { 35, 0 },
-	// { 60, 0 },
-	// { 35, 0 },
-	// { 35, -70 },
-	// { 10, -70 },
-	// { 35, -70 },
-	// { 60, -70 }
-    // };
+
+    #define points_size 10
+
     point_t points[points_size] = {
-{ -49, 0},
-{ -49, 0},
-{ -35, -48},
-{ -35, -48},
-{ -31, -25},
-{ -31, -25},
-{ 36, -25},
-{ 36, -25},
-{ 41, -48},
-{ 41, -48},
-{ 48, 1},
-{ 48, 1},
-{ 27, 0},
-{ 27, 0},
-{ 28, -16},
-{ 28, -16},
-{ 25, -15},
-{ 25, -15},
-{ 25, -11},
-{ 25, -11},
-{ 31, -12},
-{ 31, -12},
-{ 31, -16},
-{ 31, -16},
-{ 28, -16},
-{ 28, -16},
-{ 28, 1},
-{ 28, 1},
-{ -23, 0},
-{ -23, 0},
-{ -22, -18},
-{ -22, -18},
-{ -20, -17},
-{ -20, -17},
-{ -19, -13},
-{ -19, -13},
-{ -24, -13},
-{ -24, -13},
-{ -24, -17},
-{ -24, -17},
-{ -22, -17},
-{ -22, -17},
-{ -23, 0},
-{ -23, 0},
 { 0, 0},
-{ 0, 0},
+{ 21, -27},
+{ 21, -27},
+{ 22, 30},
+{ 22, 30},
+{ -28, 29},
+{ -28, 29},
+{ -27, -23},
+{ -27, -23},
+{ 21, -27},
     };
 
 
@@ -108,13 +67,101 @@ int main(void) {
     FILE* serialPort = fopen("/dev/ttyACM0", "a+");
 
     for(point_t* buf_iter = buffer; buf_iter < buffer_head; buf_iter++) {
-        fprintf(stderr, "r %i, %i\n", buf_iter->x, buf_iter->y);
+        fprintf(serialPort, "r %i, %i\n", buf_iter->x, buf_iter->y);
         printf("Sending (%i, %i)\n", buf_iter->x, buf_iter->y);
-        if(((unsigned long)buf_iter) % 3 == 0 || buf_iter < buffer + 10) {
+        if(buf_iter < buffer + 10) {
             sleep(1);
         }
+        usleep(1000 * 100);
     }
     printf("size: %i\n", buffer_head - buffer);
     free(buffer);
-    buffer = buffer_head = NULL;
+    buffer = buffer_head = 0;
+}
+
+
+
+
+
+void tcp(void) {
+    int socket_desc, client_sock, client_size;
+    struct sockaddr_in server_addr, client_addr;
+    char server_message[2000], client_message[2000];
+    
+    // Clean buffers:
+    memset(server_message, '\0', sizeof(server_message));
+    memset(client_message, '\0', sizeof(client_message));
+    
+    // Create socket:
+    socket_desc = socket(AF_INET, SOCK_STREAM, 0);
+    
+    if(socket_desc < 0){
+        printf("Error while creating socket\n");
+        return;
+    }
+    printf("Socket created successfully\n");
+    
+    // Set port and IP:
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(2005);
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    
+    // Bind to the set port and IP:
+    if(bind(socket_desc, (struct sockaddr*)&server_addr, sizeof(server_addr))<0){
+        printf("Couldn't bind to the port\n");
+        return;
+    }
+    printf("Done with binding\n");
+    
+    // Listen for clients:
+    if(listen(socket_desc, 1) < 0){
+        printf("Error while listening\n");
+        return;
+    }
+    printf("\nListening for incoming connections.....\n");
+    while(true) {
+        // Accept an incoming connection:
+        client_size = sizeof(client_addr);
+        client_sock = accept(socket_desc, (struct sockaddr*)&client_addr, &client_size);
+        
+        if (client_sock < 0){
+            printf("Can't accept\n");
+            return;
+        }
+        printf("Client connected at IP: %s and port: %i\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        
+        // Receive client's message:
+        if (recv(client_sock, client_message, sizeof(client_message), 0) < 0){
+            printf("Couldn't receive\n");
+            return;
+        }
+        printf("Msg from client: %s\n", client_message);
+        
+        // Respond to client:
+        char* file_buff = read_index_file();
+        
+        if (send(client_sock, file_buff, strlen(file_buff), 0) < 0){
+            printf("Can't send\n");
+            return;
+        }
+        close(client_sock);
+    }
+    close(socket_desc);
+}
+
+char* read_index_file(void) {
+    char* buffer = NULL;
+    size_t length;
+    FILE * f = fopen ("./website/index.html", "rb");
+    if (f) {
+        fseek(f, 0, SEEK_END);
+        length = ftell (f);
+        fseek(f, 0, SEEK_SET);
+        buffer = malloc(length);
+        if (buffer) {
+            fread(buffer, 1, length, f);
+        }
+        fclose (f);
+    }
+    return buffer;
 }

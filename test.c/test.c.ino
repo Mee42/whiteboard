@@ -87,7 +87,7 @@ void zero() {
   positionB = 0;
   lastX = xMax/2;
   lastY = yMax/2;
-  Serial.println("Zeroing");
+  Serial.println("Zeroing !");
 }
 
 // returns motor tick delta

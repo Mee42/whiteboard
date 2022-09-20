@@ -1,3 +1,5 @@
+HTTP/1.1 200 OK
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -5,7 +7,8 @@
 </head>
 
 <script>
-            const lines = [];
+    
+    const lines = [];
 
     function run() {
         const   elem = document.getElementById('canvas'),
@@ -63,7 +66,7 @@ function process_line(line) {
         // first we normalize the points
         return "{ " + Math.floor((point[0] - 500)/10) + ", " + Math.floor((point[1] - 500)/10) + "}," 
     }
-    return process_point(line[0]) + "\n" + process_point(line[0])
+    return process_point(line[0]) + "\n" + process_point(line[1])
 }
 
 
