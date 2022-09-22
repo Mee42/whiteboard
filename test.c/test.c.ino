@@ -26,42 +26,6 @@ const int sets[8][4] = {
         {1, 0, 0, 1}
 };
 
-/*
-
-m
-r 50,50
-r -50,50
-r -50,-50
-r 50,-50
-r 50,50
-m
-
-m
-r -100, -70
-r -85, 0
-r -60, -70
-r -45, 0
-r -30, -70
-
-r -20, -70
-r 0, -50
-r -20, -30
-r -20, -70
-r -20, 0
-
-r 10, 0
-r 35, 0
-r 60, 0
-r 35, 0
-r 35, -70
-
-r 10, -70
-r 35, -70
-r 60, -70
-f 0, -10
-
-*/
-
 
 // where we want to be
 // where 0 = the marker is touching the corner
@@ -74,7 +38,7 @@ long positionA = 0;
 long positionB = 0;
 
 const long xMax = 492;    // this is the width of the whiteboard in mm, 19 and 3/8in
-const long yMax = 390;    // this is the height of the whtiteboard in mm
+const long yMax = 390;    // this is the height of the whtiteboard inn mm
 
 long string_length_at_center; // in mm
 long lastX, lastY;

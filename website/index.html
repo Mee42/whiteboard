@@ -1,102 +1,47 @@
-HTTP/1.1 200 OK
-
 <!DOCTYPE html>
 <html>
 <head>
-
+<script type="text/javascript" src="static/main.js"></script>
 </head>
-
-<script>
-    
-    const lines = [];
-
-    function run() {
-        const   elem = document.getElementById('canvas'),
-                context = elem.getContext('2d');
-        
-        const width = elem.width;
-        const height = elem.height;
-        
-        // draw a X in the center
-        const x_size = 10;
-        context.strokeStyle = '#FF0000'; 
-        context.beginPath()
-        context.moveTo(width/2, height/2 + x_size);
-        context.lineTo(width/2, height/2 - x_size);
-        context.moveTo(width/2 - x_size, height/2);
-        context.lineTo(width/2 + x_size, height/2);
-        context.stroke();
-
-        context.strokeStyle = '#000000'; 
-        let startx, starty;
-        elem.addEventListener('mousedown', function(e) {
-            console.log(event);
-            startx = e.clientX - elem.offsetLeft;
-            starty = e.clientY - elem.offsetTop;
-        });
-        elem.addEventListener('mousemove', function(e) {
-            // console.log(event)
-            // context.moveTo(e.clientX, e.clientY);
-        })
-        elem.addEventListener('mouseup', function(e) {
-            console.log(event);
-            context.beginPath();
-            context.moveTo(startx, starty);
-            context.lineTo(e.clientX - elem.offsetLeft, e.clientY - elem.offsetTop);
-            context.stroke();
-
-            lines.push([[startx, starty], [e.clientX - elem.offsetLeft, e.clientY - elem.offsetTop]]);
-            // save the line
-        })
-
-
-
-        document.getElementById("export").onclick = () => {
-            const text = lines.map(x => process_line(x)).join("\n");
-            console.log(text);
-            copyTextToClipboard(text);
-        };
-        document.getElementById("clear").onclick = () => {
-            lines = []
-        }
-    }
-
-function process_line(line) {
-    function process_point(point) { // expects [x, y]
-        // first we normalize the points
-        return "{ " + Math.floor((point[0] - 500)/10) + ", " + Math.floor((point[1] - 500)/10) + "}," 
-    }
-    return process_point(line[0]) + "\n" + process_point(line[1])
-}
-
-
-// https://stackoverflow.com/questions/400212/how-do-i-copy-to-the-clipboard-in-javascript
-function copyTextToClipboard(text) {
-  if (!navigator.clipboard) {
-    fallbackCopyTextToClipboard(text);
-    return;
-  }
-  navigator.clipboard.writeText(text).then(function() {
-    console.log('Async: Copying to clipboard was successful!');
-  }, function(err) {
-    console.error('Async: Could not copy text: ', err);
-  });
-}
-</script>
 
 <style>
     #canvas {
         border: 1px solid red;
+        width: 100%;
+        height: 100%;
+    }
+    body {
+        display: flex;
+        flex-direction: column;
     }
 </style>
 
 
 <body onload="run()">
-    <button id="export">Export</button>
+<div style="z-index: 10">
+    <button id="print">Print</button>
     <button id="clear">Clear</button>
-    <canvas id="canvas" width="1000px" height="1000px">
+    <button onclick="send_instr('m\n')">Middle</button>
+    <button onclick="send_instr('A\n')">A</button>
+    <button onclick="send_instr('a\n')">a</button>
+    <button onclick="send_instr('B\n')">B</button>
+    <button onclick="send_instr('b\n')">b</button>
+    <button onclick="send_instr('z\n')">Zero</button>
 
+</div>
+<div style="position: relative;">
+    <canvas id="canvas" width="1000" height="700"
+            style="z-index: 0; background-color: transparent; width: 1000px; height: 700px;">
     </canvas>
+    <canvas id="overlay" width="1000" height="700"
+            style="position: absolute; left: 0; top: 0; z-index: 1; width: 1000px; height: 700px; background-color: transparent;">
+    </canvas>
+    <div id="logo"
+         style="position: absolute; left: 0; top: 0; display: flex; width: 1000px; height: 700px; justify-content: center; align-items: center">
+    <img src="https://se-images.campuslabs.com/clink/images/fb90a704-8d6f-4015-a976-634aa216d1d1ba5f83be-d7b8-4ad0-8f1f-411e45b042ec.jpg"
+            style="position: absolute; scale: 3; z-index: 0.5; opacity: 0.2"/>
+    </div>
+</div>
 </body>
 
 
