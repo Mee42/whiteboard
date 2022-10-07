@@ -8,27 +8,24 @@
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "driver/gpio.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_system.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_http_server.h"
-
+#include "esp_netif.h"
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "esp_wpa2.h"
 
 
 
-#define EXAMPLE_ESP_WIFI_SSID      "esp32_ap"
-#define EXAMPLE_ESP_WIFI_PASS      "password"
-#define EXAMPLE_ESP_WIFI_CHANNEL   3
-#define EXAMPLE_MAX_STA_CONN       2 
-
-static const char *TAG = "wifi softAP";
 
 void setup_gpio(void) {
     gpio_config_t io_conf = {};
@@ -48,61 +45,6 @@ void setup_gpio(void) {
 }
 
 
-
-
-static void wifi_event_handler(void* arg, esp_event_base_t event_base,
-                                    int32_t event_id, void* event_data)
-{
-    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
-        wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
-        ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
-                 MAC2STR(event->mac), event->aid);
-    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
-        wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
-        ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
-                 MAC2STR(event->mac), event->aid);
-    }
-}
-
-void wifi_init_softap(void)
-{
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler,
-                                                        NULL,
-                                                        NULL));
-
-    wifi_config_t wifi_config = {
-        .ap = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
-            .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-            .password = EXAMPLE_ESP_WIFI_PASS,
-            .max_connection = EXAMPLE_MAX_STA_CONN,
-            .authmode = WIFI_AUTH_WPA_WPA2_PSK,
-            .pmf_cfg = {
-                    .required = false,
-            },
-        },
-    };
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
-}
 
 
 esp_err_t get_handler(httpd_req_t* req) {
@@ -127,6 +69,149 @@ httpd_handle_t start_webserver(void) {
     }
     return server; // can be null
 }
+
+
+
+
+
+#define CONFIG_EXAMPLE_EAP_METHOD_TLS
+#define EXAMPLE_EAP_METHOD_TLS
+#define EXAMPLE_EAP_METHOD 0
+#define EXAMPLE_EAP_ID "cjgraham@wpi.edu"
+#define EXAMPLE_EAP_PASSWORD "esp32-PASSWORD"
+#define EXAMPLE_WIFI_SSID "WPI-Wireless"
+
+
+
+/* FreeRTOS event group to signal when we are connected & ready to make a request */
+static EventGroupHandle_t wifi_event_group;
+
+/* esp netif object representing the WIFI station */
+static esp_netif_t *sta_netif = NULL;
+
+/* The event group allows multiple bits for each event,
+   but we only care about one event - are we connected
+   to the AP with an IP? */
+const int CONNECTED_BIT = BIT0;
+
+static const char *TAG = "example";
+
+/* CA cert, taken from ca.pem
+   Client cert, taken from client.crt
+   Client key, taken from client.key
+   The PEM, CRT and KEY file were provided by the person or organization
+   who configured the AP with wpa2 enterprise.
+   To embed it in the app binary, the PEM, CRT and KEY file is named
+   in the component.mk COMPONENT_EMBED_TXTFILES variable.
+*/
+#ifdef CONFIG_EXAMPLE_VALIDATE_SERVER_CERT
+extern uint8_t ca_pem_start[] asm("_binary_ca_pem_start");
+extern uint8_t ca_pem_end[]   asm("_binary_ca_pem_end");
+#endif /* CONFIG_EXAMPLE_VALIDATE_SERVER_CERT */
+
+#ifdef CONFIG_EXAMPLE_EAP_METHOD_TLS
+extern uint8_t client_crt_start[] asm("_binary_client_crt_start");
+extern uint8_t client_crt_end[]   asm("_binary_client_crt_end");
+extern uint8_t client_key_start[] asm("_binary_client_key_start");
+extern uint8_t client_key_end[]   asm("_binary_client_key_end");
+#endif /* CONFIG_EXAMPLE_EAP_METHOD_TLS */
+
+
+static void event_handler(void* arg, esp_event_base_t event_base,
+                                int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        esp_wifi_connect();
+        xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
+    }
+}
+
+static void initialise_wifi(void)
+{
+#ifdef CONFIG_EXAMPLE_VALIDATE_SERVER_CERT
+    unsigned int ca_pem_bytes = ca_pem_end - ca_pem_start;
+    ESP_LOGI("wifi0", "ca_pem_bytes %d", ca_pem_bytes);
+#endif /* CONFIG_EXAMPLE_VALIDATE_SERVER_CERT */
+
+#ifdef CONFIG_EXAMPLE_EAP_METHOD_TLS
+    unsigned int client_crt_bytes = client_crt_end - client_crt_start;
+    unsigned int client_key_bytes = client_key_end - client_key_start;
+#endif /* CONFIG_EXAMPLE_EAP_METHOD_TLS */
+
+
+
+    ESP_LOGI("wifi0", "client_key_bytes %d", client_crt_bytes);
+    ESP_LOGI("wifi0", "client_crt_bytes %d", client_key_bytes);
+    
+    ESP_ERROR_CHECK(esp_netif_init());
+    wifi_event_group = xEventGroupCreate();
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    sta_netif = esp_netif_create_default_wifi_sta();
+    assert(sta_netif);
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
+    ESP_ERROR_CHECK( esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL) );
+    ESP_ERROR_CHECK( esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL) );
+    ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = EXAMPLE_WIFI_SSID,
+        },
+    };
+    ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
+    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)EXAMPLE_EAP_ID, strlen(EXAMPLE_EAP_ID)) );
+
+#if defined(CONFIG_EXAMPLE_VALIDATE_SERVER_CERT) || \
+    defined(CONFIG_EXAMPLE_WPA3_ENTERPRISE) || \
+    defined(CONFIG_EXAMPLE_WPA3_192BIT_ENTERPRISE)
+    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_ca_cert(ca_pem_start, ca_pem_bytes) );
+#endif /* CONFIG_EXAMPLE_VALIDATE_SERVER_CERT */ /* EXAMPLE_WPA3_ENTERPRISE */
+
+#ifdef CONFIG_EXAMPLE_EAP_METHOD_TLS
+    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_set_cert_key(client_crt_start, client_crt_bytes,\
+    		client_key_start, client_key_bytes, NULL, 0) );
+#endif /* CONFIG_EXAMPLE_EAP_METHOD_TLS */
+
+#ifdef CONFIG_EXAMPLE_USE_DEFAULT_CERT_BUNDLE
+    ESP_ERROR_CHECK(esp_wifi_sta_wpa2_use_default_cert_bundle(true));
+#endif
+    ESP_ERROR_CHECK( esp_wifi_sta_wpa2_ent_enable() );
+    ESP_ERROR_CHECK( esp_wifi_start() );
+}
+
+static void wpa2_enterprise_example_task(void *pvParameters)
+{
+    esp_netif_ip_info_t ip;
+    memset(&ip, 0, sizeof(esp_netif_ip_info_t));
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+    while (1) {
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+        if (esp_netif_get_ip_info(sta_netif, &ip) == 0) {
+            ESP_LOGI(TAG, "~~~~~~~~~~~");
+            ESP_LOGI(TAG, "IP:"IPSTR, IP2STR(&ip.ip));
+            ESP_LOGI(TAG, "MASK:"IPSTR, IP2STR(&ip.netmask));
+            ESP_LOGI(TAG, "GW:"IPSTR, IP2STR(&ip.gw));
+            ESP_LOGI(TAG, "~~~~~~~~~~~");
+        }
+    }
+}
+
+
+
+
+
+
+
+
 
 void app_main(void)
 {
@@ -167,8 +252,10 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
-    wifi_init_softap();
+
+    initialise_wifi();
+    xTaskCreate(&wpa2_enterprise_example_task, "wpa2_enterprise_example_task", 4096, NULL, 5, NULL);
+
     httpd_handle_t server_handle = start_webserver();
 }
 
