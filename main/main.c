@@ -27,16 +27,17 @@
 
 #include "wifi.h"
 
+#include "rom/ets_sys.h"
 
-
-void setup_gpio(void) {
+// expects GPIO_NUM_X to be passed as 'pin'
+static void setup_gpio_output(int pin) {
     gpio_config_t io_conf = {};
     //disable interrupt
     io_conf.intr_type = GPIO_INTR_DISABLE;
     //set as output mode
     io_conf.mode = GPIO_MODE_OUTPUT;
     //bit mask of the pins that you want to set,e.g.GPIO18/19
-    io_conf.pin_bit_mask = 1U<< GPIO_NUM_2 ;
+    io_conf.pin_bit_mask = 1U << pin;
     //disable pull-down mode
     io_conf.pull_down_en = 0;
     //disable pull-up mode
@@ -51,17 +52,28 @@ void setup_gpio(void) {
 
 esp_err_t get_handler(httpd_req_t* req) {
     const char resp[] = "Hello, from esp32!"
-    "<button onclick=\"fetch('http://esp32-1.dyn.wpi.edu/toggle', {method: 'POST'})\">Toggle</button>"
+    "<button onclick=\"fetch('http://130.215.219.203/toggle', {method: 'POST'})\">Toggle</button>"
 ;
     httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
+
+#define P_A_STEP   GPIO_NUM_15
+#define P_A_DIR    GPIO_NUM_2
+#define P_A_ENABLE GPIO_NUM_4
+#define P_A_MS1    GPIO_NUM_16
+#define P_A_MS2    GPIO_NUM_17
+
+
 esp_err_t post_handler(httpd_req_t* req) {
     const char resp[] = "";
     httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
-    static int i;
-    gpio_set_level(GPIO_NUM_2, (i = !i)); // turn on LED
+    for(int i = 0; i < 1000; i++){
+        gpio_set_level(P_A_STEP, i % 2); // turn on LED
+        //vTaskDelay(1);
+        ets_delay_us(500);
+    }
     return ESP_OK;
 } 
 
@@ -149,9 +161,20 @@ void app_main(void)
            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
     printf("Minimum free heap size: %d bytes\n", esp_get_minimum_free_heap_size());
+   
+
+
+    setup_gpio_output(P_A_STEP);
+    setup_gpio_output(P_A_DIR);
+    setup_gpio_output(P_A_ENABLE);
+    setup_gpio_output(P_A_MS1);
+    setup_gpio_output(P_A_MS2);
+
     
-    setup_gpio();    
-    gpio_set_level(GPIO_NUM_2, 1); // turn on LED
+    gpio_set_level(P_A_DIR,    0); 
+    gpio_set_level(P_A_ENABLE, 0); // enabled 
+    gpio_set_level(P_A_MS1,    0); 
+    gpio_set_level(P_A_MS2,    0); 
 
 
 
@@ -168,6 +191,9 @@ void app_main(void)
     xTaskCreate(&wpa2_enterprise_example_task, "wpa2_enterprise_example_task", 4096, NULL, 5, NULL);
 
     httpd_handle_t server_handle = start_webserver();
+
+
+
 }
 
 
