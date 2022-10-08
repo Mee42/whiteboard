@@ -23,56 +23,78 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "esp_wpa2.h"
-
-
 #include "wifi.h"
-
 #include "rom/ets_sys.h"
 
+
+
+
+typedef struct {
+    gpio_num_t step;
+    gpio_num_t direction;
+    gpio_num_t enable;
+    gpio_num_t ms1;
+    gpio_num_t ms2;
+} stepper_t;
+
+stepper_t stepper_a = {
+    .step      = GPIO_NUM_15,
+    .direction = GPIO_NUM_2,
+    .enable    = GPIO_NUM_4,
+    .ms1       = GPIO_NUM_16,
+    .ms2       = GPIO_NUM_17
+};
+
+
 // expects GPIO_NUM_X to be passed as 'pin'
-static void setup_gpio_output(int pin) {
+static void setup_gpio_output(gpio_num_t pin) {
     gpio_config_t io_conf = {};
-    //disable interrupt
     io_conf.intr_type = GPIO_INTR_DISABLE;
-    //set as output mode
     io_conf.mode = GPIO_MODE_OUTPUT;
-    //bit mask of the pins that you want to set,e.g.GPIO18/19
     io_conf.pin_bit_mask = 1U << pin;
-    //disable pull-down mode
-    io_conf.pull_down_en = 0;
-    //disable pull-up mode
-    io_conf.pull_up_en = 0;
-    //configure GPIO with the given settings
+    io_conf.pull_down_en = 0; // down-pull mode
+    io_conf.pull_up_en = 0; // pull-up mode
     esp_err_t err = gpio_config(&io_conf);
-    printf(err == ESP_OK ? "OK\n" : "ESP_ERR_INVALID_ARG\n");
+    if(err != ESP_OK) {
+        printf("Error while stetting pin %d as output pin\n", pin);
+    }
+}
+
+static void setup_stepper(stepper_t* stepper) {
+    setup_gpio_output(stepper->step);
+    setup_gpio_output(stepper->direction);
+    setup_gpio_output(stepper->enable);
+    setup_gpio_output(stepper->ms1);
+    setup_gpio_output(stepper->ms2);
+    gpio_set_level(stepper->direction, 0);
+    gpio_set_level(stepper->ms1, 1);
+    gpio_set_level(stepper->ms2, 0);
+    gpio_set_level(stepper->enable, 0);
 }
 
 
-
+extern uint8_t index_html_start[] asm("_binary_index_html_start"); 
+extern uint8_t index_html_end[]   asm("_binary_index_html_end"); 
 
 esp_err_t get_handler(httpd_req_t* req) {
-    const char resp[] = "Hello, from esp32!"
-    "<button onclick=\"fetch('http://130.215.219.203/toggle', {method: 'POST'})\">Toggle</button>"
-;
-    httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, (char*)index_html_start, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
-
-#define P_A_STEP   GPIO_NUM_15
-#define P_A_DIR    GPIO_NUM_2
-#define P_A_ENABLE GPIO_NUM_4
-#define P_A_MS1    GPIO_NUM_16
-#define P_A_MS2    GPIO_NUM_17
-
-
-esp_err_t post_handler(httpd_req_t* req) {
+esp_err_t spin_handler(httpd_req_t* req) {
     const char resp[] = "";
+    //int header_length = httpd_req_get_hdr_value_len(req, "_wb_ticks");
+    //char* ticks_str_buf = alloca(header_length + 3);
+    //for(int i = 0; i < header_length + 3; i++){
+    //    ticks_str_buf[i] = 0;
+    //}
+    //httpd_req_get_hdr_value_str(req, "_wb_ticks", ticks_str_buf, header_length);
+    printf("Spinning!\n"); 
     httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
-    for(int i = 0; i < 1000; i++){
-        gpio_set_level(P_A_STEP, i % 2); // turn on LED
+    for(int i = 0; i < 200 * 4 ; i++){
+        gpio_set_level(stepper_a.step, i % 2); // turn on LED
         //vTaskDelay(1);
-        ets_delay_us(500);
+        ets_delay_us(500 + 150);
     }
     return ESP_OK;
 } 
@@ -84,10 +106,10 @@ httpd_uri_t uri_get_root = {
     .user_ctx = NULL
 };
 
-httpd_uri_t uri_post_toggle = {
-    .uri = "/toggle",
+httpd_uri_t uri_post_spin = {
+    .uri = "/spin",
     .method = HTTP_POST,
-    .handler = post_handler,
+    .handler = spin_handler,
     .user_ctx = NULL
 };
 
@@ -97,7 +119,7 @@ httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
     if(httpd_start(&server, &config) == ESP_OK) {
         httpd_register_uri_handler(server, &uri_get_root);
-        httpd_register_uri_handler(server, &uri_post_toggle);
+        httpd_register_uri_handler(server, &uri_post_spin);
     }
     return server; // can be null
 }
@@ -109,73 +131,11 @@ httpd_handle_t start_webserver(void) {
 
 static const char *TAG = "main.c";
 
-static void wpa2_enterprise_example_task(void *pvParameters)
-{
-    esp_netif_ip_info_t ip;
-    memset(&ip, 0, sizeof(esp_netif_ip_info_t));
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-    while (1) {
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-        if (esp_netif_get_ip_info(sta_netif, &ip) == 0) {
-            ESP_LOGI(TAG, "~~~~~~~~~~~");
-            ESP_LOGI(TAG, "IP:"IPSTR, IP2STR(&ip.ip));
-            ESP_LOGI(TAG, "MASK:"IPSTR, IP2STR(&ip.netmask));
-            ESP_LOGI(TAG, "GW:"IPSTR, IP2STR(&ip.gw));
-            ESP_LOGI(TAG, "~~~~~~~~~~~");
-        }
-    }
-}
 
 
 
-
-
-
-
-
-
-void app_main(void)
-{
-    printf("Hello world!\n");
-
-
-    /* Print chip information */
-    esp_chip_info_t chip_info;
-    uint32_t flash_size;
-    esp_chip_info(&chip_info);
-    printf("This is %s chip with %d CPU core(s), WiFi%s%s, ",
-           CONFIG_IDF_TARGET,
-           chip_info.cores,
-           (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
-           (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "");
-
-    printf("silicon revision %d, ", chip_info.revision);
-    if(esp_flash_get_size(NULL, &flash_size) != ESP_OK) {
-        printf("Get flash size failed");
-        return;
-    }
-
-    printf("%uMB %s flash\n", flash_size / (1024 * 1024),
-           (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-
-    printf("Minimum free heap size: %d bytes\n", esp_get_minimum_free_heap_size());
-   
-
-
-    setup_gpio_output(P_A_STEP);
-    setup_gpio_output(P_A_DIR);
-    setup_gpio_output(P_A_ENABLE);
-    setup_gpio_output(P_A_MS1);
-    setup_gpio_output(P_A_MS2);
-
-    
-    gpio_set_level(P_A_DIR,    0); 
-    gpio_set_level(P_A_ENABLE, 0); // enabled 
-    gpio_set_level(P_A_MS1,    0); 
-    gpio_set_level(P_A_MS2,    0); 
-
+void app_main(void) { 
+    setup_stepper(&stepper_a);
 
 
     //Initialize NVS
@@ -186,14 +146,9 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-
+    
     initalize_wifi();
-    xTaskCreate(&wpa2_enterprise_example_task, "wpa2_enterprise_example_task", 4096, NULL, 5, NULL);
-
-    httpd_handle_t server_handle = start_webserver();
-
-
-
+    start_webserver();
 }
 
 

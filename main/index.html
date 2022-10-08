@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title> ESP32 </title>
+
+<script>
+function submit() {
+    fetch('spin', {
+        method: 'post',
+        headers: {
+            '_wb_ticks': document.getElementById("ticks").value
+        }
+    });
+}
+</script>
+
+</head>
+
+<body>
+
+<h1> ESP 32 Web Server Moment </h1>
+
+<form action="javascript:submit()">
+  <div> 
+    <label for="ticks">Ticks: </label>
+    <input type="text" name="ticks" id="ticks" required>
+  </div>
+  <div>
+    <input type="submit" value="submit">
+  </div>
+</form>
+
+
+<button onclick="fetch('spin', {method: 'POST'})"> spin! </button>
+
+</body>
+
+
+</html>
+
+
