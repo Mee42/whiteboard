@@ -3,3 +3,4 @@ build
 main/client.crt
 main/client.key
 main/build
+.cache/
