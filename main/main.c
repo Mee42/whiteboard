@@ -1,9 +1,4 @@
-/*
- * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: CC0-1.0
- */
-
+#include <stdint.h>
 #include <stdio.h>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
@@ -23,11 +18,14 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "esp_wpa2.h"
-#include "wifi.h"
 #include "rom/ets_sys.h"
+#include "esp_timer.h"
 
+#include <inttypes.h>
 
-
+#include "http.h"
+#include "wifi.h"
+#include "main.h"
 
 typedef struct {
     gpio_num_t step;
@@ -35,6 +33,7 @@ typedef struct {
     gpio_num_t enable;
     gpio_num_t ms1;
     gpio_num_t ms2;
+	int32_t   position;
 } stepper_t;
 
 stepper_t stepper_a = {
@@ -42,12 +41,24 @@ stepper_t stepper_a = {
     .direction = GPIO_NUM_2,
     .enable    = GPIO_NUM_4,
     .ms1       = GPIO_NUM_16,
-    .ms2       = GPIO_NUM_17
+    .ms2       = GPIO_NUM_17,
+	.position  = 0
+};
+stepper_t stepper_b = {
+	.step      = GPIO_NUM_23,
+	.direction = GPIO_NUM_22,
+	.enable    = GPIO_NUM_21,
+	.ms1       = GPIO_NUM_19,
+	.ms2       = GPIO_NUM_18, 
+	.position  = 0
 };
 
 
-// expects GPIO_NUM_X to be passed as 'pin'
 static void setup_gpio_output(gpio_num_t pin) {
+	// this is the new code, has not been tested yet
+	//gpio_reset_pin(pin);
+	//gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+	//return; // in theory the above is the same as the below. TODO verify
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
@@ -68,75 +79,85 @@ static void setup_stepper(stepper_t* stepper) {
     setup_gpio_output(stepper->ms2);
     gpio_set_level(stepper->direction, 0);
     gpio_set_level(stepper->ms1, 1);
-    gpio_set_level(stepper->ms2, 0);
+    gpio_set_level(stepper->ms2, 1); // turn to 0 for big step
     gpio_set_level(stepper->enable, 0);
 }
 
-
-extern uint8_t index_html_start[] asm("_binary_index_html_start"); 
-extern uint8_t index_html_end[]   asm("_binary_index_html_end"); 
-
-esp_err_t get_handler(httpd_req_t* req) {
-    httpd_resp_send(req, (char*)index_html_start, HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
-}
-
-esp_err_t spin_handler(httpd_req_t* req) {
-    const char resp[] = "";
-    //int header_length = httpd_req_get_hdr_value_len(req, "_wb_ticks");
-    //char* ticks_str_buf = alloca(header_length + 3);
-    //for(int i = 0; i < header_length + 3; i++){
-    //    ticks_str_buf[i] = 0;
-    //}
-    //httpd_req_get_hdr_value_str(req, "_wb_ticks", ticks_str_buf, header_length);
-    printf("Spinning!\n"); 
-    httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
-    for(int i = 0; i < 200 * 4 ; i++){
-        gpio_set_level(stepper_a.step, i % 2); // turn on LED
-        //vTaskDelay(1);
-        ets_delay_us(500 + 150);
-    }
-    return ESP_OK;
-} 
-
-httpd_uri_t uri_get_root = {
-    .uri = "/",
-    .method = HTTP_GET,
-    .handler = get_handler,
-    .user_ctx = NULL
-};
-
-httpd_uri_t uri_post_spin = {
-    .uri = "/spin",
-    .method = HTTP_POST,
-    .handler = spin_handler,
-    .user_ctx = NULL
-};
-
-httpd_handle_t start_webserver(void) {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    ESP_LOGI("http", "Starting server on port: %d", config.server_port); 
-    httpd_handle_t server = NULL;
-    if(httpd_start(&server, &config) == ESP_OK) {
-        httpd_register_uri_handler(server, &uri_get_root);
-        httpd_register_uri_handler(server, &uri_post_spin);
-    }
-    return server; // can be null
+void move_carriage_to(int x, int y) {
+	// TODO
 }
 
 
+// speed is in ticks per second
+void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz) {
+	gpio_set_level(stepper_a.direction, a_ticks < 0 ? 1 : 0);
+	gpio_set_level(stepper_b.direction, b_ticks < 0 ? 1 : 0);
+	a_ticks = a_ticks < 0 ? (0 - a_ticks) : a_ticks;
+	b_ticks = b_ticks < 0 ? (0 - b_ticks) : b_ticks;
 
+	// we want to run two motors at variable, different ferquency
+	int period_a = 1000 * 1000  / a_hz / 2;
+	int period_b = 1000 * 1000  / b_hz / 2;
+	int64_t next_for_a = esp_timer_get_time() + period_a;
+	bool a_state = true;
+	int64_t next_for_b = esp_timer_get_time() + period_b;
+	bool b_state = true;
+	while(a_ticks > 0 || b_ticks > 0) {
+		// just a for now
+		int64_t current_time = esp_timer_get_time();
 
+		// we're going to see if 'a' or 'b' is closer to toggling	
+		// and then do that
+		if(next_for_a == next_for_b) {
+			next_for_a++; // if they overlap (likely if we keep our timings tight)
+			continue;     // then just do 'b', and do 'a' next microsecond
+						  // we don't need to be precice on timings here
+		} else if(next_for_a < next_for_b) {
+			int64_t delta = next_for_a - current_time;
+			if(delta >= 0) {
+				ets_delay_us(next_for_a - current_time);
+			}
+			// TODO do a more real time way of getting next_for_a 
+			// so we don't drift over time??
+			// might be better for lines and shit
+			next_for_a = esp_timer_get_time() + period_a;
 
+			if(a_ticks == 0) continue;
+			// we do this after all the other stuff
+			// so that it doesn't impact timings when a finishes
+			// I think that makes sense
 
-static const char *TAG = "main.c";
+			a_state = !a_state;
+			gpio_set_level(stepper_a.step, a_state); 
+			if(a_state == false) {
+				// when the falling edge of the pulse, basically
+				// that's what we count as the end of the step
+				a_ticks--;
+			}
+		} else {
+			// b is closer to toggling
+			int64_t delta = next_for_b - current_time;
+			if(delta >= 0) {
+				ets_delay_us(next_for_b - current_time);
+			}
+			next_for_b = esp_timer_get_time() + period_b;
+		
+			if(b_ticks == 0) continue;
 
-
+			b_state = !b_state;
+			gpio_set_level(stepper_b.step, b_state);
+			if(b_state == false) {
+				b_ticks--;
+			}
+		}
+	}
+	printf("done spinning\n");
+}
 
 
 void app_main(void) { 
     setup_stepper(&stepper_a);
-
+	setup_stepper(&stepper_b);
 
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();

@@ -1,0 +1,3 @@
+openssl pkey -in cjgraham@wpi.edu.pem -out client.key
+openssl x509 -outform der -in cjgraham@wpi.edu.pem -out client.crt
+
