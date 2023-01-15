@@ -38,10 +38,10 @@ function submit_helper(a_t, a_hz, b_t, b_hz) {
     fetch('spin', {
         method: 'post',
         headers: {
-            '_wb_a_ticks': a_t, // document.getElementById("a_ticks").value,
-			'_wb_a_hz': a_hz, // document.getElementById("a_hz").value,
-            '_wb_b_ticks': b_t, // document.getElementById("b_ticks").value,
-			'_wb_b_hz': b_hz, // document.getElementById("b_hz").value,
+            '_wb_a_ticks': a_t, 
+			'_wb_a_hz': a_hz, 
+            '_wb_b_ticks': b_t,
+			'_wb_b_hz': b_hz,
         }
     });
 }
@@ -53,32 +53,41 @@ function submit() {
 		    document.getElementById("b_hz").value)	
 }
 
-
-const menus = ['manual', 'draw', 'info']
-function activate(id) {
-    for(x of menus)
-        document.getElementById(x).style = "display: none";
-    document.getElementById(id).style = "display: black";
+function send_ccode() {
+	const content = document.getElementById("input-ccode").value;
+	fetch('http://esp32-1.dyn.wpi.edu/ccode', {
+		method: 'post',
+		body: content
+	}).then(e => {
+		const span = document.getElementById("response-back");
+		if(e.status == 400) {
+			span.style = "color: red";
+		} else if(e.status == 500) {
+			span.style = "color: #c87c07;"
+		} else {
+			span.style = "color: green";
+		}
+		e.text().then(x => span.innerText = x)
+	})
+	console.log("sending ccode", content);
+	return false;
 }
 
+
 function onload() {
-
-
-	document.getElementById('input-file')
-	  .addEventListener('change', getFile)
-
-		document.body.addEventListener("keypress", e => {
-		if(e.key == "a") {
-			submit_helper(10, 200, 0, 200);
-		} else if(e.key == "o") {
-			submit_helper(-10, 200, 0, 200);
-		} else if(e.key == "e") {
-			submit_helper(0, 200, 10, 200);
-		} else if(e.key == "u"){
-			submit_helper(0, 200, -10, 200);
-		}
-	}); 
-
+	// document.body.addEventListener("keypress", e => {
+	// 	console.log(e);
+	// 	return;
+	// 	if(e.key == "") {
+	// 		submit_helper(10, 200, 0, 200);
+	// 	} else if(e.key == "o") {
+	// 		submit_helper(-10, 200, 0, 200);
+	// 	} else if(e.key == "e") {
+	// 		submit_helper(0, 200, 10, 200);
+	// 	} else if(e.key == "u"){
+	// 		submit_helper(0, 200, -10, 200);
+	// 	}
+	// }); 
 }
 
 </script>
@@ -89,49 +98,67 @@ function onload() {
 
 <h1> Whiteboard </h1>
 
-<div style="display: flex; flex-direction: row">
-<button onclick="activate('manual')">Manual</button>
-<button onclick="activate('draw')">Draw</button>
-<button onclick="activate('info')">Info</button>
-</div>
+<h2>CCode</h2>
 
-<div>
+<form onsubmit="return send_ccode()">
+	<input style="width: 40%; font-size: 20px" type="text" id="input-ccode"/>
+	<input type="submit" value="Run"/>
+	<span id="response-back"></span>
+</form>
 
-<div id="manual" style="display: block">
-	<h2>Manual Control</h2>
-	A ticks: <input type="text" id="a_ticks"/>
-	A hz: <input type="text" id="a_hz"/>
+
+<style>
+	.monospaced span {
+		font-family: monospace;
+		padding-right: 20px;
+		width: 200px;
+		display: inline-block;
+	}
+	.monospaced span.inline {
+		width: auto;
+		padding-right: 0px;
+	}
+	body {
+		margin: 20px;
+	}
+</style>
+
+<div class="monospaced">
+	<h4>Machine Code</h4>
+	Machine codes work with the length of the strings.
+	There are two spools, A and B.
 	<br/>
-	B ticks: <input type="text" id="b_ticks"/>
-	B hz: <input type="text" id="b_hz"/>
-	<button onclick="submit()"> spin! </button>
+
+	<span>m0 [a ticks] [b ticks]</span> adjusts the position of A and B relative to the current position
+	<br/>
+	<span>m1 [a ticks] [b ticks]</span> sets the position of A and B relative to home
+	<br/>
+	<span>m10 [A/B]</span> Sets the home of the specified spoool, such that it is currently at the absolute position 0
+	<br/>
+	<span>m11 [hz]</span> Sets the maximum stepper tick rate in hertz
+
+
+
+	<h4>C Code</h4>
+	<span>c0 [x] [y]</span> Moves the marker to a specific <span class="inline">[x] [y]</span> position as fast as possible
+	<br/>
+	<span>c1 [x] [y]</span> Moves the market to a specific <span class="inline">[x] [y]</span> position in a straight line
+	<br/>
+	<span>c2..9</span> TO BE DETERMINED more complex movements
+	<br/>
+	<span>c10 ([x] [y])</span> Sets the relative home to the current position, or <span class="inline">[x] [y]</span> if specified
+	<br/>
+	<span>c11 [home/relative]</span>
+	Makes commands like <span class="inline"">c0</span>
+	act relative to home or the relative marker
+	<br/>
+
 </div>
-<div id="draw" style="display: block">
-	<h2>Draw</h2>
-<div>
- <label for="input-file">Specify a file:</label><br>
- <input type="file" id="input-file">
-</div>
-
-<textarea id="content-target"></textarea>
-
-</div>
-<div id="info" style="display: block">
-
-	<h2>Info</h2>
-</div>
-
-</div>
 
 
-
-
-</div>
 
 
 </body>
 
 
 </html>
-
-

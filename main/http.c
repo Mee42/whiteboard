@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include <stdlib.h>
+#include "ccode.h"
 
 extern uint8_t index_html_start[] asm("_binary_index_html_start"); 
 extern uint8_t index_html_end[]   asm("_binary_index_html_end"); 
@@ -21,7 +22,6 @@ static char* get_header_and_malloc(httpd_req_t* req, const char* name) {
 
 
 static esp_err_t spin_handler(httpd_req_t* req) {
-    const char resp[] = "";
 
 	char* a_ticks_str = get_header_and_malloc(req, "_wb_a_ticks");
 	int a_ticks = atoi(a_ticks_str);
@@ -40,12 +40,35 @@ static esp_err_t spin_handler(httpd_req_t* req) {
 	free(b_hz_str);
 	
 
-	ESP_LOGI("http", "a: %d ticks, %d hz, b: %d ticks, %d hz", 
+	ESP_LOGI("http", "a: %d ticks, %d hz. b: %d ticks, %d hz", 
 			a_ticks, a_hz, b_ticks, b_hz);
-    httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_sendstr(req, "Success");
+
 	spin_stepper(a_ticks, b_ticks, a_hz, b_hz);
+    
     return ESP_OK;
-} 
+}
+
+static size_t min(size_t a, size_t b) {
+    return a < b ? a : b;
+}
+
+static esp_err_t run_ccode_http(httpd_req_t* req) {
+    
+
+   /* content length would give length of string */
+    char content[100] = { 0 };
+
+    /* Truncate if content length larger than the buffer */
+    size_t recv_size = min(req->content_len, sizeof(content));
+
+    httpd_req_recv(req, content, recv_size);
+
+    ESP_LOGI("http", "got ccode %s", content);
+
+    return run_ccode(content, req);
+}
+
 
 static const httpd_uri_t uri_get_root = {
     .uri = "/",
@@ -59,6 +82,12 @@ httpd_uri_t uri_post_spin = {
     .method = HTTP_POST,
     .handler = spin_handler,
 };
+httpd_uri_t uri_post_ccode = {
+    .uri = "/ccode",
+    .method = HTTP_POST,
+    .handler = run_ccode_http,
+};
+
 
 httpd_handle_t start_webserver(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -67,6 +96,8 @@ httpd_handle_t start_webserver(void) {
     if(httpd_start(&server, &config) == ESP_OK) {
         httpd_register_uri_handler(server, &uri_get_root);
         httpd_register_uri_handler(server, &uri_post_spin);
+        httpd_register_uri_handler(server, &uri_post_ccode);
+        
     }
     return server; // can be null
 }

@@ -83,11 +83,6 @@ static void setup_stepper(stepper_t* stepper) {
     gpio_set_level(stepper->enable, 0);
 }
 
-void move_carriage_to(int x, int y) {
-	// TODO
-}
-
-
 // speed is in ticks per second
 void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz) {
 	gpio_set_level(stepper_a.direction, a_ticks < 0 ? 1 : 0);
@@ -153,6 +148,12 @@ void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz) {
 	}
 	printf("done spinning\n");
 }
+
+
+
+
+
+
 
 
 void app_main(void) { 
