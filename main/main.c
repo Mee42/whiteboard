@@ -85,6 +85,9 @@ static void setup_stepper(stepper_t* stepper) {
 
 // speed is in ticks per second
 void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz) {
+
+	a_ticks = -1 * a_ticks; // reverse the direction of A
+
 	gpio_set_level(stepper_a.direction, a_ticks < 0 ? 1 : 0);
 	gpio_set_level(stepper_b.direction, b_ticks < 0 ? 1 : 0);
 	a_ticks = a_ticks < 0 ? (0 - a_ticks) : a_ticks;

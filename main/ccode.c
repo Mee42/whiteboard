@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include <errno.h>
 #include "main.h"
+#include "math.h"
 
 char* next_token(char **ref) {
     char *str = *ref;
@@ -19,12 +20,11 @@ char* next_token(char **ref) {
 }
 
 
-
-
 void m0(int a, int b);
 void m1(int a, int b);
-void m10(char c);
+void m10();
 void m11(int hz);
+void c0(int a, int b);
 
 
 int run_ccode(char *ccode, httpd_req_t *req) {
@@ -82,23 +82,17 @@ int run_ccode(char *ccode, httpd_req_t *req) {
         httpd_resp_sendstr(req, "Running");
         m1(a_target, b_target);
     } else IF_CASE(m10) {
-        if(toks[1] == NULL) {
-            error = "Expecting token at token 1";
-            goto run_ccode_err;
-        }
-        char c = toks[1][0];
-        if(c != 'a' && c != 'A' && c != 'b' && c != 'B') {
-            error = "Token 1 must be either 'A' or 'B'";
-            goto run_ccode_err;
-        }
-        m10(c);
-        httpd_resp_sendstr(req, c == 'a' || c == 'A' ? "Homed A" : "Homed B");
+        m10();
+        httpd_resp_sendstr(req, "Homed");
     } else IF_CASE(m11) {
         PARSE_INT(1, hz);
         m11(hz);
         httpd_resp_sendstr(req, "Set feed rate");
     } else IF_CASE(c0) {
-        goto run_ccode_unimpl;
+        PARSE_INT(1, a_target);
+        PARSE_INT(2, b_target);
+        httpd_resp_sendstr(req, "Running");
+        c0(a_target, b_target);
     } else IF_CASE(c1) {
         goto run_ccode_unimpl;
     } else IF_CASE(c10) {
@@ -125,10 +119,7 @@ int run_ccode(char *ccode, httpd_req_t *req) {
     
 }
 
-long long a_home = 0;
-long long b_home = 0;
-
- // 0 means nothing for a_pos, when a_pos = a_home it is at the top corner
+// 0 is 0mm string length from the corner.
 long long a_pos = 0;
 long long b_pos = 0;
 
@@ -142,19 +133,13 @@ void m0(int a, int b){
 }
 
 void m1(int a_target, int b_target) {
-    int a_ticks = (a_home + a_target) - a_pos;
-    int b_ticks = (b_home + b_target) - b_pos;
+    int a_ticks = a_target - a_pos;
+    int b_ticks = b_target - b_pos;
     spin_stepper(a_ticks, b_ticks, max_feedrate, max_feedrate);
-    a_pos = a_home + a_target; // a_pos = a_pos + (a_target - a_pos)
-    b_pos = b_home + b_target;
+    a_pos = a_target;
+    b_pos = b_target;
 }
-void m10(char mode) {
-    if(mode == 'a' || mode == 'A') {
-        a_home = a_pos;
-    } else {
-        b_home = b_pos;
-    }
-}
+
 void m11(int hz) {
     max_feedrate = hz;
 }
@@ -168,7 +153,55 @@ int get_status_info(httpd_req_t *req) {
         "\"max_feedrate\": %d"
         "}";
     char buf[255] = { 0 };
-    sprintf(buf, format, a_pos - a_home, b_pos - b_home, max_feedrate);
+    sprintf(buf, format, a_pos, b_pos, max_feedrate);
     httpd_resp_sendstr(req, buf);
     return ESP_OK;
+}
+
+
+// CONFIGURABLE
+const double width = 822.325; // mm
+
+const double startingHeight = 5 * 25.4; // mm, 5 inches down
+const double startingWidth = width / 2;
+
+const int ticks_per_rotation = 3200;
+const double spool_dimm = 70; // mm
+const double spool_circum = 70 * 2 * 3.1415; // mm
+
+typedef struct {
+    double x, y;
+    long long a, b;
+} setpoint_t;
+
+long long mm_to_ticks(double mm) {
+    double num_of_rotations = mm / spool_circum;
+    double ticks = num_of_rotations * ticks_per_rotation;
+    return (long long)(ticks);
+}
+
+setpoint_t compute_string_lengths(double x, double y) {
+    double a_mm = sqrt(x*x + y*y);
+    double b_mm = sqrt((width - x) * (width - x) + y*y);
+    setpoint_t ret = {
+        .x = x, .y = y,
+        .a = mm_to_ticks(a_mm),
+        .b = mm_to_ticks(b_mm),
+    };
+    return ret;
+}
+
+
+
+void m10() {
+    setpoint_t startpoint = compute_string_lengths(startingWidth, startingHeight);
+    a_pos = startpoint.a;
+    b_pos = startpoint.b;
+}
+
+void c0(int x, int y) {
+    setpoint_t setpoints = compute_string_lengths(x, y);
+    spin_stepper(setpoints.a - a_pos, setpoints.b - b_pos, max_feedrate, max_feedrate);
+    a_pos = setpoints.a;
+    b_pos = setpoints.b;
 }
