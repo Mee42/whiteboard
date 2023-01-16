@@ -27,8 +27,6 @@ void m10(char c);
 void m11(int hz);
 
 
-
-
 int run_ccode(char *ccode, httpd_req_t *req) {
 
     const char *error = "Generic Error";
@@ -44,12 +42,12 @@ int run_ccode(char *ccode, httpd_req_t *req) {
     }
 
     char* toks[7] = { next_token(&ccode), 
-                       next_token(&ccode), 
-                       next_token(&ccode), 
-                       next_token(&ccode), 
-                       next_token(&ccode), 
-                       next_token(&ccode), 
-                       next_token(&ccode) };
+                      next_token(&ccode), 
+                      next_token(&ccode), 
+                      next_token(&ccode), 
+                      next_token(&ccode), 
+                      next_token(&ccode), 
+                      next_token(&ccode) };
     
     #define IF_CASE(NAME) if(strcmp(toks[0], #NAME) == 0) 
 
@@ -136,7 +134,7 @@ long long b_pos = 0;
 
 int max_feedrate = 1000;
 
-// THESE ARE ALL UNTESTED
+
 void m0(int a, int b){
     spin_stepper(a, b, max_feedrate, max_feedrate);
     a_pos += a;
@@ -159,4 +157,18 @@ void m10(char mode) {
 }
 void m11(int hz) {
     max_feedrate = hz;
+}
+
+
+int get_status_info(httpd_req_t *req) {
+    const char *format = 
+        "{"
+        "\"a_pos\": %lld,"
+        "\"b_pos\": %lld,"
+        "\"max_feedrate\": %d"
+        "}";
+    char buf[255] = { 0 };
+    sprintf(buf, format, a_pos - a_home, b_pos - b_home, max_feedrate);
+    httpd_resp_sendstr(req, buf);
+    return ESP_OK;
 }

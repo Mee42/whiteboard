@@ -87,6 +87,12 @@ httpd_uri_t uri_post_ccode = {
     .method = HTTP_POST,
     .handler = run_ccode_http,
 };
+httpd_uri_t uri_get_status_info = {
+    .uri = "/status",
+    .method = HTTP_GET,
+    .handler = get_status_info,
+};
+
 
 
 httpd_handle_t start_webserver(void) {
@@ -97,7 +103,7 @@ httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &uri_get_root);
         httpd_register_uri_handler(server, &uri_post_spin);
         httpd_register_uri_handler(server, &uri_post_ccode);
-        
+        httpd_register_uri_handler(server, &uri_get_status_info);
     }
     return server; // can be null
 }

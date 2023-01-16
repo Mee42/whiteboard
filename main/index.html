@@ -73,21 +73,20 @@ function send_ccode() {
 	return false;
 }
 
+function refresh_status() {
+	fetch("http://esp32-1.dyn.wpi.edu/status")
+		.then(e => e.json())
+		.then(e => {
+			for(key in e) {
+				document.getElementById("status_gen_" + key).innerText = e[key];
+			}
+			console.log("refreshed");
+			refresh_status();
+		});
+}
 
 function onload() {
-	// document.body.addEventListener("keypress", e => {
-	// 	console.log(e);
-	// 	return;
-	// 	if(e.key == "") {
-	// 		submit_helper(10, 200, 0, 200);
-	// 	} else if(e.key == "o") {
-	// 		submit_helper(-10, 200, 0, 200);
-	// 	} else if(e.key == "e") {
-	// 		submit_helper(0, 200, 10, 200);
-	// 	} else if(e.key == "u"){
-	// 		submit_helper(0, 200, -10, 200);
-	// 	}
-	// }); 
+	refresh_status();
 }
 
 </script>
@@ -108,6 +107,9 @@ function onload() {
 
 
 <style>
+	.mono {
+		font-family: monospace;
+	}
 	.monospaced span {
 		font-family: monospace;
 		padding-right: 20px;
@@ -120,6 +122,10 @@ function onload() {
 	}
 	body {
 		margin: 20px;
+	}
+	.fixed_width {
+		width: 100px;
+		display: inline-block;
 	}
 </style>
 
@@ -152,9 +158,18 @@ function onload() {
 	Makes commands like <span class="inline"">c0</span>
 	act relative to home or the relative marker
 	<br/>
-
 </div>
 
+<hr>
+
+<div class="mono">
+	A Position: <span id="status_gen_a_pos"></span>
+	<br/>
+	B Position: <span id="status_gen_b_pos"></span>
+	<br/>
+	Max Feedrate: <span id="status_gen_max_feedrate"></span>
+	<br/>
+</div>
 
 
 
