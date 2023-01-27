@@ -34,25 +34,6 @@ function readFileContent(file) {
   })
 }
 
-function submit_helper(a_t, a_hz, b_t, b_hz) {
-    fetch('spin', {
-        method: 'post',
-        headers: {
-            '_wb_a_ticks': a_t, 
-			'_wb_a_hz': a_hz, 
-            '_wb_b_ticks': b_t,
-			'_wb_b_hz': b_hz,
-        }
-    });
-}
-
-function submit() {
-	submit_helper(document.getElementById("a_ticks").value,
-	    	document.getElementById("a_hz").value,
-		    document.getElementById("b_ticks").value,	
-		    document.getElementById("b_hz").value)	
-}
-
 function send_ccode() {
 	const content = document.getElementById("input-ccode").value;
 	fetch('http://esp32-1.dyn.wpi.edu/ccode', {
@@ -72,13 +53,25 @@ function send_ccode() {
 	console.log("sending ccode", content);
 	return false;
 }
+let running = false;
 
 function refresh_status() {
 	fetch("http://esp32-1.dyn.wpi.edu/status")
 		.then(e => e.json())
 		.then(e => {
 			for(key in e) {
-				document.getElementById("status_gen_" + key).innerText = e[key];
+				let d = document.getElementById("status_gen_" + key);
+				if(key == "running") {
+					d = document.getElementById("running_indicator");
+					running = e[key]
+					d.innerText = (e[key] ? "Running" : "Idle")
+					d.style = "color: " + (e[key] ? "green" : "#8000ff")
+				} else if(key == "regs") {
+					d.innerText = JSON.stringify(e[key]).substring(1)
+					d.innerText = d.innerText.substring(0, d.innerText.length - 1)
+				} else {
+					d.innerText = e[key];
+				}
 			}
 			console.log("refreshed");
 			refresh_status();
@@ -98,7 +91,7 @@ function onload() {
 
 <h1> Whiteboard </h1>
 
-<h2>CCode</h2>
+<h2>CCode <span id="running_indicator"></span></h2>
 
 <form onsubmit="return send_ccode()">
 	<input style="width: 40%; font-size: 20px" type="text" id="input-ccode"/>
@@ -134,29 +127,35 @@ function onload() {
 	<h4>Machine Code</h4>
 	Machine codes work with the length of the strings.
 	There are two spools, A and B.
-	<br/>
+	<br/><br/>
 
-	<span>m0 [a ticks] [b ticks]</span>Adjusts the position of A and B relative to the current position
+	<span>m0 a[ticks] b[ticks]</span>Adjusts the position of A and B relative to the current position.
 	<br/>
-	<span>m1 [a ticks] [b ticks]</span>Sets the position of A and B relative to home
+	<span>m1 a[ticks] b[ticks]</span>Sets the absolute position of A and B.
 	<br/>
 	<span>m10</span>Homes both the A and B spools, assuming both are at the hardcoded center of the board.
 	<br/>
-	<span>m11 [hz]</span> Sets the maximum stepper tick rate in hertz
-
+	<span>m11 s[hz]</span>Sets the maximum stepper tick rate in hertz.
 
 
 	<h4>C Code</h4>
-	<span>c0 [x] [y]</span>Moves the marker to a specific <span class="inline">[x] [y]</span> position as fast as possible
+	Registers <span class="inline">r0..9</span> exist. They are all references off of <span class="inline">(0, 0)</span>.
+	<br/><span class="inline"> r0</span> is always <span class="inline">(0, 0)</span>.
+	<br/><span class="inline"> r9</span> is always the current carriage position.
 	<br/>
-	<span>c1 [x] [y]</span>Moves the market to a specific <span class="inline">[x] [y]</span> position in a straight line
+	Register can be specified to any command to use that position as the origin for the operation.
+	If left out, the "default" register is used (set via <span class="inline">c11</span>)
+	<br/><br/>
+	<span>c0 x[mm] y[mm] r[reg]</span>Moves the marker to a specific <span class="inline">[x] [y]</span> position as fast as possible
+	<br/>
+	<span>c1 x[mm] y[mm] r[reg]</span>Moves the market to a specific <span class="inline">[x] [y]</span> position in a straight line
 	<br/>
 	<span>c2..9</span>TO BE DETERMINED more complex movements
 	<br/>
-	<span>c10 ([x] [y])</span>Sets the relative home to the current position, or <span class="inline">[x] [y]</span> if specified
+	<span>c10 x[mm] y[mm] r[reg]</span>Sets the specified register to the specified
+	<span class="inline">[x] [y]</span> position (relative to 0, 0), unless left out, in which case current position is used.
 	<br/>
-	<span>c11 [home/relative]</span>Makes commands like <span class="inline"">c0</span>
-	act relative to home or the relative marker
+	<span>c11 r[reg]</span>Sets the current default register.
 	<br/>
 </div>
 
@@ -164,11 +163,25 @@ function onload() {
 
 <div class="mono">
 	A Position: <span id="status_gen_a_pos"></span>
+	(<span id="status_gen_a_real"></span>)
 	<br/>
 	B Position: <span id="status_gen_b_pos"></span>
+	(<span id="status_gen_b_real"></span>)
+	<br/>
+	X Position: <span id="status_gen_x_pos"></span>
+	<br/>
+	Y Position: <span id="status_gen_y_pos"></span>
+	<br/>
+	Is XY Valid: <span id="status_gen_is_xy_valid"></span>
 	<br/>
 	Max Feedrate: <span id="status_gen_max_feedrate"></span>
 	<br/>
+	Default Register: <span id="status_gen_default_reg"></span>
+	<br/>
+	Registers: <span id="status_gen_regs"></span>
+	
+	<br/>
+
 </div>
 
 <script>

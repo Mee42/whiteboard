@@ -84,7 +84,7 @@ static void setup_stepper(stepper_t* stepper) {
 }
 
 // speed is in ticks per second
-void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz) {
+void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz, long long* a_real, long long* b_real) {
 
 	a_ticks = -1 * a_ticks; // reverse the direction of A
 
@@ -131,6 +131,7 @@ void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz) {
 				// when the falling edge of the pulse, basically
 				// that's what we count as the end of the step
 				a_ticks--;
+				(*a_real)--;
 			}
 		} else {
 			// b is closer to toggling
@@ -146,6 +147,7 @@ void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz) {
 			gpio_set_level(stepper_b.step, b_state);
 			if(b_state == false) {
 				b_ticks--;
+				(*b_real)--;
 			}
 		}
 	}

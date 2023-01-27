@@ -1,4 +1,4 @@
-idf_component_register(SRCS main.c wifi.c http.c ccode.c
+idf_component_register(SRCS main.c wifi.c http.c ccode.c parsing_ccode.c
                     EMBED_TXTFILES client.crt client.key index.html
                     INCLUDE_DIRS "")
 
