@@ -87,6 +87,7 @@ function refresh_status() {
 
 function onload() {
 	refresh_status();
+	setup_canvas();
 }
 
 </script>
@@ -135,9 +136,9 @@ function onload() {
 	There are two spools, A and B.
 	<br/>
 
-	<span>m0 [a ticks] [b ticks]</span> adjusts the position of A and B relative to the current position
+	<span>m0 [a ticks] [b ticks]</span>Adjusts the position of A and B relative to the current position
 	<br/>
-	<span>m1 [a ticks] [b ticks]</span> sets the position of A and B relative to home
+	<span>m1 [a ticks] [b ticks]</span>Sets the position of A and B relative to home
 	<br/>
 	<span>m10</span>Homes both the A and B spools, assuming both are at the hardcoded center of the board.
 	<br/>
@@ -146,16 +147,15 @@ function onload() {
 
 
 	<h4>C Code</h4>
-	<span>c0 [x] [y]</span> Moves the marker to a specific <span class="inline">[x] [y]</span> position as fast as possible
+	<span>c0 [x] [y]</span>Moves the marker to a specific <span class="inline">[x] [y]</span> position as fast as possible
 	<br/>
-	<span>c1 [x] [y]</span> Moves the market to a specific <span class="inline">[x] [y]</span> position in a straight line
+	<span>c1 [x] [y]</span>Moves the market to a specific <span class="inline">[x] [y]</span> position in a straight line
 	<br/>
-	<span>c2..9</span> TO BE DETERMINED more complex movements
+	<span>c2..9</span>TO BE DETERMINED more complex movements
 	<br/>
-	<span>c10 ([x] [y])</span> Sets the relative home to the current position, or <span class="inline">[x] [y]</span> if specified
+	<span>c10 ([x] [y])</span>Sets the relative home to the current position, or <span class="inline">[x] [y]</span> if specified
 	<br/>
-	<span>c11 [home/relative]</span>
-	Makes commands like <span class="inline"">c0</span>
+	<span>c11 [home/relative]</span>Makes commands like <span class="inline"">c0</span>
 	act relative to home or the relative marker
 	<br/>
 </div>
@@ -171,8 +171,97 @@ function onload() {
 	<br/>
 </div>
 
+<script>
+
+let points = [
+	[ 300, 300 ],
+	[ 200, 100 ],
+	[ 200, 500 ],
+	[ 250, 300 ]
+];
 
 
+const t_step = 0.01;
+let B = (t, i) => (1 - t) * (1 - t) * (1 - t) * points[0][i] + 3 * (1 - t) * (1 - t) * t * points[1][i] + 3 * (1 - t) * t * t * points[2][i] + t * t * t * points[3][i];
+
+
+function draw_curve(ctx, w, h) {
+
+	
+	ctx.fillStyle = "lightblue";
+
+	ctx.fillRect(0, 0, w, h);	
+
+	//ctx.fillStyle = "rgba(0.01,0.01,0.01,0.11)";
+
+	//ctx.fillRect(0, 0, w, h);
+
+	ctx.fillStyle = "green";
+	ctx.lineWidth = 4
+	for(point of points) {
+		ctx.fillRect(point[0] - 10, point[1] - 10, 20, 20)
+	}
+
+	let t = 0;
+	let x_1 = points[0][0];
+	let y_1 = points[0][1]; 
+	ctx.beginPath();
+	ctx.moveTo(x_1, y_1);
+	while(t < 1) {
+		t += t_step;
+		let x_2 = B(t, 0);
+		let y_2 = B(t, 1);
+		ctx.lineTo(x_2, y_2);
+	}
+	ctx.stroke();
+}
+
+function setup_canvas() {
+	const canvas = document.getElementById("draw");
+	const ctx = canvas.getContext("2d");
+
+	let current_point = null; // null = mouse up
+
+	function get_xy(e) {
+		const rect = canvas.getBoundingClientRect();
+		const x = e.clientX - rect.left;
+		const y = e.clientY - rect.top;
+		return { x: x, y: y };
+	}
+
+	canvas.onmousedown = function(e){
+		// find closest point
+		const pos = get_xy(e);
+		let dist = Infinity;
+		for(i in [0, 1, 2, 3]) {
+			// hypotenuse distance
+			const d = Math.pow(pos.x - points[i][0], 2) + Math.pow(pos.y - points[i][1], 2);
+			if(d < 300 && d < dist) {
+				dist = d;
+				current_point = i;
+			}
+		}
+	}
+	canvas.onmouseup = function(e){
+		current_point = null;
+	}
+
+	canvas.onmousemove = function(e){
+		if(current_point == null) return;
+		const pos = get_xy(e);
+		points[current_point][0] = pos.x;
+		points[current_point][1] = pos.y;
+		draw_curve(ctx, canvas.width, canvas.height);
+		return false;
+	}
+	draw_curve(ctx, canvas.width, canvas.height);
+}
+</script>
+
+<div class="curves"></div>
+<canvas id="draw" width="1000" height="1000">
+
+</canvas>
 </body>
 
 

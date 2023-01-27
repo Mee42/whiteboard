@@ -165,7 +165,7 @@ const double width = 822.325; // mm
 const double startingHeight = 5 * 25.4; // mm, 5 inches down
 const double startingWidth = width / 2;
 
-const int ticks_per_rotation = 3200;
+const int ticks_per_rotation = 3200 * 2;
 const double spool_dimm = 70; // mm
 const double spool_circum = 70 * 2 * 3.1415; // mm
 
