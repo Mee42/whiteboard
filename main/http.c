@@ -41,22 +41,28 @@ static const httpd_uri_t uri_get_root = {
     .user_ctx = NULL
 };
 
-httpd_uri_t uri_post_ccode = {
+static const httpd_uri_t uri_post_ccode = {
     .uri = "/ccode",
     .method = HTTP_POST,
     .handler = run_ccode_http,
+	.user_ctx = NULL
 };
-httpd_uri_t uri_get_status_info = {
+
+static const httpd_uri_t uri_get_status_info = {
     .uri = "/status",
     .method = HTTP_GET,
     .handler = get_status_info,
+	.user_ctx = NULL
 };
 
 
 
 httpd_handle_t start_webserver(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    ESP_LOGI("http", "Starting server on port: %d", config.server_port); 
+	config.core_id = 0;
+
+    ESP_LOGI("http", "Starting server on port: %d, with priority %d", 
+			config.server_port, config.task_priority); 
     httpd_handle_t server = NULL;
     if(httpd_start(&server, &config) == ESP_OK) {
         httpd_register_uri_handler(server, &uri_get_root);

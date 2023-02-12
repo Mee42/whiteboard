@@ -75,7 +75,7 @@ function refresh_status() {
 			}
 			console.log("refreshed");
 			refresh_status();
-		});
+		}).catch(e => { console.log(e); refresh_status(); } );
 }
 
 function onload() {

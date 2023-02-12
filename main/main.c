@@ -85,7 +85,7 @@ static void setup_stepper(stepper_t* stepper) {
 
 // speed is in ticks per second
 void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz, long long* a_real, long long* b_real) {
-
+	ESP_LOGI("main.c", "spin_stepper: a_ticks %d, b_ticks: %d", a_ticks, b_ticks);	
 	a_ticks = -1 * a_ticks; // reverse the direction of A
 
 	gpio_set_level(stepper_a.direction, a_ticks < 0 ? 1 : 0);
@@ -126,7 +126,7 @@ void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz, long long* a_rea
 			// I think that makes sense
 
 			a_state = !a_state;
-			gpio_set_level(stepper_a.step, a_state); 
+//			gpio_set_level(stepper_a.step, a_state); 
 			if(a_state == false) {
 				// when the falling edge of the pulse, basically
 				// that's what we count as the end of the step
@@ -144,7 +144,7 @@ void spin_stepper(int a_ticks, int b_ticks, int a_hz, int b_hz, long long* a_rea
 			if(b_ticks == 0) continue;
 
 			b_state = !b_state;
-			gpio_set_level(stepper_b.step, b_state);
+//			gpio_set_level(stepper_b.step, b_state);
 			if(b_state == false) {
 				b_ticks--;
 				(*b_real)--;
@@ -176,6 +176,8 @@ void app_main(void) {
     
     initalize_wifi();
     start_webserver();
+
+	vTaskDelete(NULL);
 }
 
 

@@ -4,6 +4,8 @@
 #include "main.h"
 #include "math.h"
 #include "parsing_ccode.h"
+#include "freertos/FreeRTOS.h"
+
 
 #define TAG "ccode"
 
@@ -144,36 +146,50 @@ int default_reg = 0;
 xy_pos_t regs[10] = { REPEAT_10X({ .x = 0 COMMA .y = 0 } COMMA) }; 
 
 
+void dump_tasks() {
+	return;
+	char *buf2 = malloc(1028 * 8);// 8kb
+	vTaskList(buf2);
+	ESP_LOGI("ccode", "Data: \n%s", buf2);
+	free(buf2);
+}
+
 // =========================
 
-void task_fn() {
-    int a_ticks = -1000;
-    int b_ticks = -1000;
+void task_fn(int* args) {
+    int a_ticks = args[0];
+    int b_ticks = args[1];
     running = true;
     ESP_LOGI("task_fn", "starting spin");
     spin_stepper(a_ticks, b_ticks, max_feedrate, max_feedrate, &real_a, &real_b);
     ESP_LOGI("task_fn", "done with spin");
     running = false;
+	dump_tasks();
+	vTaskDelete(NULL);
 }
 
 void spin_step_ez(int a_ticks, int b_ticks) {
-    task_fn();
-    if(false) return;
-      xTaskCreate(
-                    task_fn,          /* Task function. */
-                    "spintask",        /* String with name of task. */
-                    1000,            /* Stack size in bytes. */
-                    NULL,             /* Parameter passed as input of the task */
-                    1,                /* Priority of the task. */
-                    NULL);            /* Task handle. */
+	static int args[2];
+	args[0] = a_ticks;
+	args[1] = b_ticks;
+    xTaskCreatePinnedToCore(
+				(void (*)(void*))task_fn,           /* Task function. */
+				"spintask",        /* String with name of task. */
+				3000,             /* Stack size in bytes. */
+				args,             /* Parameter passed as input of the task */
+				1,                /* Priority of the task. */
+				NULL,             /* taks handle */
+				1);               /* pin to core 1 */ 
 
 }
 
 void m0(args_t args){
+	ESP_LOGI("ccode", "starting m0");
     spin_step_ez(args.a, args.b);
     current_position.a += args.a;
     current_position.b += args.b;
     current_position.is_xy_valid = false;
+	ESP_LOGI("ccode", "done with m0");
 }
 
 void m1(args_t args) {
@@ -234,6 +250,10 @@ int get_status_info(httpd_req_t *req) {
         REG(7), REG(8), REG(9),
         running ? "true" : "false");
     httpd_resp_sendstr(req, buf);
+
+
+	dump_tasks();
+
     return ESP_OK;
 }
 
